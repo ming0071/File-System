@@ -1,0 +1,10 @@
+# 編譯產物
+obj/
+bin/
+*.exe
+*.o
+
+# 模擬資料
+data/*.dump
+dump/*
+!dump/.gitkeep

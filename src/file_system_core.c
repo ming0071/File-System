@@ -3,45 +3,185 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include "file_system.h"
 
-
-
-
-
-
-
-void commandLoop(FileSystem *fs);
-void handleCommand(char *command, FileSystem *fs);
-
-
-void deleteSubInodes(FileSystem *fs, Inode *inode);
-
-
-
-
-void displayHelp();
-
-
-
-
-void commandLoop(FileSystem *fs)
+FileSystem *createFileSystem(size_t size)
 {
-    char command[MAX_COMMAND_LENGTH];
-    char currentPath[MAX_PATH_LENGTH];
+    FileSystem *fs = (FileSystem *)malloc(sizeof(FileSystem));
+    if (!fs)
+        return NULL;
+    fs->partition_size = size;
+    fs->block_count = size / BLOCK_SIZE;
+    fs->block_used = 0;
+    fs->data_blocks = (char *)malloc(fs->block_count * BLOCK_SIZE);
+    fs->block_bitmap = (int *)calloc(fs->block_count, sizeof(int));
+    fs->inode_count = size / INODE_PER_PARTITION;
+    fs->inode_used = 1;
+    fs->inodes = (Inode **)calloc(fs->inode_count, sizeof(Inode *));
 
-    while (1)
+    // initialize root directory
+    Inode *root = (Inode *)malloc(sizeof(Inode));
+    root->name = strdup("/");
+    root->is_directory = 1;
+    root->file_size = 0;
+    root->start_block = -1;
+    root->block_count = 0;
+    root->parent = NULL;
+    root->directory_items = NULL;
+    root->directory_item_count = 0;
+
+    fs->root = root;
+    fs->inodes[0] = root;
+    fs->current_directory = root;
+    return fs;
+}
+
+void printCurrentPath(Inode *current)
+{
+    if (current->parent == NULL)
     {
-        printCurrentPath(fs->current_directory);
-        printf(" $ ");
-        scanf("%s", command);
-        handleCommand(command, fs);
+        printf("/");
+        return;
+    }
+    printCurrentPath(current->parent);
+    printf("%s/", current->name);
+}
+
+void status(FileSystem *fs)
+{
+    printf("partition size: %zu \n", fs->partition_size);
+    printf("total inodes: %zu \n", fs->inode_count);
+    printf("used inodes: %zu \n", fs->inode_used);
+    printf("total blocks: %zu \n", fs->block_count);
+    printf("used blocks: %zu \n", fs->block_used);
+    printf("block size: %zu \n", BLOCK_SIZE);
+    printf("free space: %zu \n", fs->partition_size - fs->block_used * BLOCK_SIZE);
+}
+
+void ls(FileSystem *fs)
+{
+    if (!fs->current_directory->is_directory)
+    {
+        printf("Current directory is not a directory.\n");
+        return;
+    }
+    else if (fs->current_directory->directory_item_count == 0)
+    {
+        printf("No files or directories found.\n");
+        return;
+    }
+
+    size_t count = 0;
+    for (size_t i = 0; i < fs->current_directory->directory_item_count; ++i)
+    {
+        Inode *inode = fs->current_directory->directory_items[i];
+        printf("%s%-*s%s ", inode->is_directory ? COLOR_BLUE : COLOR_WHITE, COLUMN_WIDTH, inode->name, COLOR_RESET);
+        count++;
+        if (count % 6 == 0)
+        {
+            printf("\n");
+        }
+    }
+    printf("\n");
+}
+
+void cd(FileSystem *fs, const char *path)
+{
+    if (strcmp(path, "..") == 0)
+    {
+        if (fs->current_directory->parent)
+            fs->current_directory = fs->current_directory->parent;
+        return;
+    }
+    // search for the target directory
+    for (size_t i = 0; i < fs->current_directory->directory_item_count; i++)
+    {
+        if (strcmp(fs->current_directory->directory_items[i]->name, path) == 0 && fs->current_directory->directory_items[i]->is_directory)
+        {
+            fs->current_directory = fs->current_directory->directory_items[i];
+            return;
+        }
+    }
+    printf("Directory not found.\n");
+}
+
+void my_mkdir(FileSystem *fs, const char *dirname)
+{
+    for (size_t i = 0; i < fs->current_directory->directory_item_count; ++i)
+    {
+        Inode *inode = fs->current_directory->directory_items[i];
+        if (inode->is_directory && strcmp(inode->name, dirname) == 0)
+        {
+            printf("Directory '%s' already exists.\n", dirname);
+            return;
+        }
+    }
+
+    Inode *new_dir = (Inode *)malloc(sizeof(Inode));
+    new_dir->name = strdup(dirname);
+    new_dir->is_directory = 1;
+    new_dir->file_size = 0;
+    new_dir->start_block = -1;
+    new_dir->block_count = 0;
+    new_dir->parent = fs->current_directory;
+    new_dir->directory_items = NULL;
+    new_dir->directory_item_count = 0;
+    
+    fs->inodes[fs->inode_used] = new_dir;
+    fs->inode_used++;
+    fs->block_used++;
+
+    if (fs->current_directory->is_directory)
+    {
+        fs->current_directory->directory_item_count++;
+        fs->current_directory->directory_items = realloc(fs->current_directory->directory_items, fs->current_directory->directory_item_count * sizeof(Inode *));
+        fs->current_directory->directory_items[fs->current_directory->directory_item_count - 1] = new_dir;
     }
 }
 
 
+void deleteSubInodes(FileSystem *fs, Inode *inode) {
+    if (!inode) return;
 
+    for (size_t i = 0; i < inode->directory_item_count; i++) {
+        Inode *child = inode->directory_items[i];
+        if (!child) continue;
 
+        // 1. 如果是目錄，先遞迴進去刪除子項目
+        if (child->is_directory) {
+            deleteSubInodes(fs, child);
+        } else {
+            // 2. 如果是檔案，回收磁碟區塊 (這部分是 BMC 工程師最看重的)
+            if (child->start_block != -1) {
+                for (size_t j = 0; j < child->block_count; j++) {
+                    int block_index = child->start_block + j; // 修正：應使用 j
+                    if (block_index < (int)fs->block_count) {
+                        fs->block_bitmap[block_index] = 0;
+                    }
+                }
+                fs->block_used -= child->block_count;
+            }
+        }
 
+        // 3. 更新全局 Inode 使用量與清理索引陣列
+        fs->inode_used--;
+        for (size_t k = 0; k < fs->inode_count; k++) {
+            if (fs->inodes[k] == child) {
+                fs->inodes[k] = NULL;
+                break;
+            }
+        }
+
+        // 4. 釋放 RAM 資源
+        free(child->name);
+        free(child);
+    }
+
+    // 5. 釋放當前目錄的項目指標陣列
+    free(inode->directory_items);
+    inode->directory_items = NULL;
+    inode->directory_item_count = 0;
+}
 
 void my_rmdir(FileSystem *fs, const char *dirname)
 {
@@ -86,6 +226,74 @@ void my_rmdir(FileSystem *fs, const char *dirname)
     free(target);
 
     printf("Directory '%s' and its contents have been removed.\n", dirname);
+}
+
+void touch(FileSystem *fs, const char *fileName)
+{
+    // Check if a file with the same name already exists
+    for (size_t i = 0; i < fs->current_directory->directory_item_count; i++)
+    {
+        if (strcmp(fs->current_directory->directory_items[i]->name, fileName) == 0)
+        {
+            printf("File or directory with name '%s' already exists.\n", fileName);
+            return;
+        }
+    }
+
+    // Check if there are free inodes available
+    if (fs->inode_used >= fs->inode_count)
+    {
+        printf("No available inodes. File creation failed.\n");
+        return;
+    }
+
+    // Allocate a new inode
+    Inode *newFile = (Inode *)malloc(sizeof(Inode));
+    if (!newFile)
+    {
+        printf("Memory allocation failed for new file.\n");
+        return;
+    }
+
+    // Initialize the inode properties
+    newFile->name = strdup(fileName); // Duplicate the file name
+    newFile->is_directory = 0;        // It is a file
+    newFile->file_size = 0;           // Initial size is 0
+    newFile->start_block = -1;        // No block allocated yet
+    newFile->block_count = 0;         // No blocks used
+    newFile->directory_item_count = 0;
+    newFile->directory_items = NULL; // Not a directory
+    newFile->parent = fs->current_directory;
+
+    // Add the new file to the current directory's directory_items array
+    size_t newItemCount = fs->current_directory->directory_item_count + 1;
+    fs->current_directory->directory_items = (Inode **)realloc(
+        fs->current_directory->directory_items, newItemCount * sizeof(Inode *));
+    if (!fs->current_directory->directory_items)
+    {
+        printf("Failed to expand directory items array.\n");
+        free(newFile->name);
+        free(newFile);
+        return;
+    }
+
+    fs->current_directory->directory_items[fs->current_directory->directory_item_count] = newFile;
+    fs->current_directory->directory_item_count = newItemCount;
+
+    // Add the new inode to the global inodes array
+    for (size_t i = 0; i < fs->inode_count; i++)
+    {
+        if (!fs->inodes[i]) // Find a free slot
+        {
+            fs->inodes[i] = newFile;
+            break;
+        }
+    }
+
+    // Update filesystem metadata
+    fs->inode_used++;
+
+    printf("File '%s' created successfully.\n", fileName);
 }
 
 void put(FileSystem *fs, const char *filename)
@@ -216,7 +424,7 @@ void cat(FileSystem *fs, const char *filename)
     }
 
     // print the content of the file, read data from data blocks
-    size_t bytes_read = 0;
+    // size_t bytes_read = 0;
     size_t remaining_size = inode->file_size;
     size_t block_index = inode->start_block;
 
@@ -333,122 +541,4 @@ void rm(FileSystem *fs, const char *filename)
     fs->inode_used--;
 
     printf("File %s has been deleted.\n", filename);
-}
-
-void touch(FileSystem *fs, const char *fileName)
-{
-    // Check if a file with the same name already exists
-    for (size_t i = 0; i < fs->current_directory->directory_item_count; i++)
-    {
-        if (strcmp(fs->current_directory->directory_items[i]->name, fileName) == 0)
-        {
-            printf("File or directory with name '%s' already exists.\n", fileName);
-            return;
-        }
-    }
-
-    // Check if there are free inodes available
-    if (fs->inode_used >= fs->inode_count)
-    {
-        printf("No available inodes. File creation failed.\n");
-        return;
-    }
-
-    // Allocate a new inode
-    Inode *newFile = (Inode *)malloc(sizeof(Inode));
-    if (!newFile)
-    {
-        printf("Memory allocation failed for new file.\n");
-        return;
-    }
-
-    // Initialize the inode properties
-    newFile->name = strdup(fileName); // Duplicate the file name
-    newFile->is_directory = 0;        // It is a file
-    newFile->file_size = 0;           // Initial size is 0
-    newFile->start_block = -1;        // No block allocated yet
-    newFile->block_count = 0;         // No blocks used
-    newFile->directory_item_count = 0;
-    newFile->directory_items = NULL; // Not a directory
-    newFile->parent = fs->current_directory;
-
-    // Add the new file to the current directory's directory_items array
-    size_t newItemCount = fs->current_directory->directory_item_count + 1;
-    fs->current_directory->directory_items = (Inode **)realloc(
-        fs->current_directory->directory_items, newItemCount * sizeof(Inode *));
-    if (!fs->current_directory->directory_items)
-    {
-        printf("Failed to expand directory items array.\n");
-        free(newFile->name);
-        free(newFile);
-        return;
-    }
-
-    fs->current_directory->directory_items[fs->current_directory->directory_item_count] = newFile;
-    fs->current_directory->directory_item_count = newItemCount;
-
-    // Add the new inode to the global inodes array
-    for (size_t i = 0; i < fs->inode_count; i++)
-    {
-        if (!fs->inodes[i]) // Find a free slot
-        {
-            fs->inodes[i] = newFile;
-            break;
-        }
-    }
-
-    // Update filesystem metadata
-    fs->inode_used++;
-
-    printf("File '%s' created successfully.\n", fileName);
-}
-
-
-
-
-int main()
-{
-    int option;
-
-    FileSystem *fileSystem = NULL;
-
-    printf("Options:\n");
-    printf(" 1. Load from file\n");
-    printf(" 2. Create new partition in memory\n");
-    printf("Choose an option: ");
-    scanf("%d", &option);
-
-    if (option == 2)
-    {
-        size_t fileSystemSize;
-
-        printf("Input size of a new partition (example: 102400 2048000)\n");
-        printf("partition size = ");
-        scanf("%zu", &fileSystemSize);
-
-        fileSystem = createFileSystem(fileSystemSize);
-        if (!fileSystem)
-        {
-            printf("Failed to create partition.\n");
-            return 1;
-        }
-        printf("Make new partition successful!\n");
-
-        commandLoop(fileSystem);
-    }
-    else if (option == 1)
-    {
-        char password[7];
-        printf("Please enter the 6-digit password: ");
-        scanf("%6s", password);
-
-        loadFileSystem(&fileSystem, password);
-        commandLoop(fileSystem);
-    }
-    else
-    {
-        printf("Invalid option.\n");
-    }
-
-    return 0;
 }
