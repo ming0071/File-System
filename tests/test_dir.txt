@@ -1,0 +1,10 @@
+2
+1024000
+mkdir folder1
+cd folder1
+mkdir folder2
+ls
+cd ..
+ls
+exit
+123456

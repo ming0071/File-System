@@ -1,0 +1,8 @@
+2
+1024000
+touch file1.txt
+ls
+rm file1.txt
+ls
+exit
+123456
