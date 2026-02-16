@@ -33,25 +33,5 @@ mingw32-make
 
 ### 3. 自動化功能測試
 ```powershell
-cmd /c "type test_script.txt | bin\fs_sim.exe"
-```
-
-執行自動化測試腳本後，系統應呈現如下邏輯結果：
-```Plaintext
-Options:
- 1. Load from file
- 2. Create new partition in memory
-Choose an option: Input size of a new partition (example: 102400 2048000)
-partition size = Make new partition successful!
-/ $ / $ /sys_log/ $ File 'bmc_boot.log' created successfully.
-/sys_log/ $ bmc_boot.log 
-/sys_log/ $ partition size: 1024000 
-total inodes: 1024 
-used inodes: 3 
-total blocks: 1000 
-used blocks: 1 
-block size: 1024 
-free space: 1022976 
-/sys_log/ $ / $ / $ sys_log    sensors    
-/ $ Enter 6-digit password to save: File system has been saved to 'data/filesystem.dump'with password.
+./run_test.ps1
 ```
