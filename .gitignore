@@ -3,6 +3,7 @@ obj/
 bin/
 *.exe
 *.o
+.dump
 
 # 模擬資料
 data/*.dump
