@@ -87,45 +87,63 @@ void handleCommand(char *command, FileSystem *fs)
         printf("Unknown command: %s\n", command);
 }
 
+void commandLoop(FileSystem *fs)
+{
+    char command[MAX_COMMAND_LENGTH];
+
+    while (1)
+    {
+        printCurrentPath(fs->current_directory);
+        printf(" $ ");
+        if (scanf("%s", command) == EOF)
+            break;
+        handleCommand(command, fs);
+    }
+}
+
 int main()
 {
     int option;
-    FileSystem *fs = NULL;
+
+    FileSystem *fileSystem = NULL;
+
     printf("Options:\n");
     printf(" 1. Load from file\n");
     printf(" 2. Create new partition in memory\n");
     printf("Choose an option: ");
     scanf("%d", &option);
 
-    if (scanf("%d", &option) != 1)
-        return 1;
-
-    if (option == 1)
+    if (option == 2)
     {
-        char pwd[7];
-        printf("Enter 6-digit password: ");
-        scanf("%6s", pwd);
-        loadFileSystem(&fs, pwd);
+        size_t fileSystemSize;
+
+        printf("Input size of a new partition (example: 102400 2048000)\n");
+        printf("partition size = ");
+        scanf("%zu", &fileSystemSize);
+
+        fileSystem = createFileSystem(fileSystemSize);
+        if (!fileSystem)
+        {
+            printf("Failed to create partition.\n");
+            return 1;
+        }
+        printf("Make new partition successful!\n");
+
+        commandLoop(fileSystem);
+    }
+    else if (option == 1)
+    {
+        char password[7];
+        printf("Please enter the 6-digit password: ");
+        scanf("%6s", password);
+
+        loadFileSystem(&fileSystem, password);
+        commandLoop(fileSystem);
     }
     else
     {
-        size_t size;
-        printf("Input size of a new partition (example: 102400 2048000)\n");
-        printf("Partition size: ");
-        scanf("%zu", &size);
-        fs = createFileSystem(size);
+        printf("Invalid option.\n");
     }
 
-    if (!fs)
-        return 1;
-    char cmd[MAX_COMMAND_LENGTH];
-    while (1)
-    {
-        printCurrentPath(fs->current_directory);
-        printf(" $ ");
-        if (scanf("%s", cmd) == EOF)
-            break;
-        handleCommand(cmd, fs);
-    }
     return 0;
 }

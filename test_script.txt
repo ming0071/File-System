@@ -1,0 +1,12 @@
+2
+1024000
+mkdir sys_log
+cd sys_log
+touch bmc_boot.log
+ls
+status
+cd ..
+mkdir sensors
+ls
+exit
+123456

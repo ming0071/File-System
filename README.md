@@ -1,54 +1,57 @@
-# Simulated Inode-based File System
+# File System Simulator
 
-本專案實作了一個精簡但功能完整的 **虛擬檔案系統 (Simulated File System)**。透過模擬作業系統底層的儲存管理機制，在單一的大型連續空間（Simulated Partition）中，自行維護一套獨立的檔案架構，實現了類 Unix 系統中的檔案索引與磁碟調度邏輯。
+本專案為 **進階 C 語言課程** 的期末專案。實作一個基於記憶體模擬的檔案系統，模擬現代作業系統中磁碟分區、檔案管理與資料持久化的核心邏輯。
 
----
+## 專案概念
+本專案透過分配一塊連續的記憶體空間來模擬硬體磁碟。使用者可以在此空間內進行完整的檔案操作。系統支援將記憶體中的狀態保存為二進位映像檔（.dump），並在下次啟動時透過密碼驗證還原。
 
-## 核心系統架構
+## 功能說明
+本系統提供 CLI 互動介面，包含以下功能：
+* **檔案/目錄操作**：`ls` (列出清單)、`cd` (切換路徑)、`mkdir/rmdir` (目錄增刪)、`touch/rm` (檔案增刪)。
+* **外部整合**：`put` (從真實系統匯入檔案)、`get` (匯出檔案至真實系統)。
+* **檢視與管理**：`cat` (讀取內容)、`status` (顯示磁碟與 Inode 使用狀況)。
+* **安全機制**：`exit` (驗證 6 位數密碼並儲存狀態)。
 
-整體虛擬檔案系統可分為 **磁碟管理 (Disk Management)** 與 **檔案索引 (File Indexing)** 兩大部分：
+## 核心技術與實現
+* **Inode 索引架構**：每個檔案與目錄均配有一個 Inode 結構，紀錄檔案元數據（Metadata），如名稱、大小、類型及所佔用的區塊索引。
+* **Block Bitmap 管理**：使用位元圖（Bitmap）技術管理模擬磁碟的區塊分配與回收，精確追蹤儲存空間使用情況。
+* **遞迴資源回收**：實作深度優先搜尋（DFS）遞迴邏輯，在刪除目錄時確保所有子目錄、檔案及其佔用的 Block 與 Inode 被完全釋放，防止資源洩漏。
+* **資料持久化**：實作序列化機制，將複雜的記憶體資料結構（如陣列與結構體）完整寫入 `.dump` 二進位檔，實現跨 Session 的存取。
 
-### 1. 磁碟管理系統 (Disk Management)
-* **數據區塊 (Data Blocks)**：將模擬磁區劃分為固定大小（1024B）的區塊，作為資料儲存的最小單位。
-* **空間狀態感知 (Bitmap)**：應用 **Block Bitmap** 機制監控區塊使用狀態。在執行寫入時，系統會掃描未分配區塊，達成即時的空間調度。
-* **狀態監控 (Status)**：提供 `status` 指令，即時輸出分區大小、Inode 使用率、區塊佔用情形與剩餘空間等數據。
+## 編譯、執行與測試指令
 
-### 2. 檔案索引系統 (File Indexing)
-* **Inode 架構**：參考類 Unix 系統，定義 `Inode` 結構記錄檔案元數據，包含名稱、類型、大小、以及指向資料區塊的起始索引。
-* **樹狀層級管理**：透過指標陣列 `directory_items` 建立目錄與檔案的親緣關係，實現多層級路徑尋訪（如 `cd`, `ls`）。
-* **持久化機制**：實作 **二進位序列化存檔**，將記憶體中的 Inode 樹與 Data Blocks 完整導出為 `.dump` 檔，並整合 **6 位數密碼校驗** 確保資料安全性。
+### 1. 編譯專案 (Makefile)
+```powershell
+mingw32-make clean
+mingw32-make
+```
 
+### 2. 啟動程式
+```powershell
+./bin/fs_sim.exe
+```
 
+### 3. 自動化功能測試
+```powershell
+cmd /c "type test_script.txt | bin\fs_sim.exe"
+```
 
----
-
-## 技術實作與比較
-
-在開發過程中，針對檔案系統的運算效率與安全性進行了以下技術處理與比較：
-
-* **分配策略比較**：採用 **連續分配 (Consecutive Allocation)** 策略。相較於鏈結分配，本系統在執行 `cat` 讀取時能減少尋道次數，提升讀取連續性。
-* **目錄管理邏輯**：對比了固定大小與 **動態分配**。本專案選擇以 `realloc` 動態擴充目錄項目的指標陣列，確保在不同規模的目錄層級下都能維持記憶體使用效率。
-* **數據交互機制**：除了虛擬系統內的 CRUD 操作，特別開發了 `put` 與 `get` 指令，實作了實體作業系統與虛擬磁區之間的資料封裝與拆解邏輯。
-
----
-
-## 指令集 (List of Commands)
-
-| 指令 | 說明 |
-| :--- | :--- |
-| `ls` | 列出當前目錄下的檔案與子目錄（藍色為目錄，白色為檔案） |
-| `cd` | 切換當前工作目錄 |
-| `mkdir` / `rmdir` | 建立或刪除目錄（支援子項目清空） |
-| `touch` / `rm` | 建立空檔案或刪除特定檔案 |
-| `put` / `get` | 將實體檔案放入虛擬空間，或取出至 `dump/` 資料夾 |
-| `cat` | 在終端機輸出虛擬檔案內容 |
-| `status` | 顯示當前分區、Inode 與 Block 的詳細狀態 |
-| `exit` | 輸入密碼後加密儲存系統狀態並退出 |
-
----
-
-## 快速開始
-
-### 1. 編譯專案
-```bash
-gcc file_system.c -o file_system
+執行自動化測試腳本後，系統應呈現如下邏輯結果：
+```Plaintext
+Options:
+ 1. Load from file
+ 2. Create new partition in memory
+Choose an option: Input size of a new partition (example: 102400 2048000)
+partition size = Make new partition successful!
+/ $ / $ /sys_log/ $ File 'bmc_boot.log' created successfully.
+/sys_log/ $ bmc_boot.log 
+/sys_log/ $ partition size: 1024000 
+total inodes: 1024 
+used inodes: 3 
+total blocks: 1000 
+used blocks: 1 
+block size: 1024 
+free space: 1022976 
+/sys_log/ $ / $ / $ sys_log    sensors    
+/ $ Enter 6-digit password to save: File system has been saved to 'data/filesystem.dump'with password.
+```
