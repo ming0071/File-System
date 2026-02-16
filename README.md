@@ -35,3 +35,8 @@ mingw32-make
 ```powershell
 ./run_test.ps1
 ```
+
+確認測試檔案的實際輸出
+```powershell
+cmd /c "type tests\test_file.txt | bin\fs_sim.exe"
+```
