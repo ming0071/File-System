@@ -8,15 +8,13 @@
 ## 系統架構設計
 採用經典的 Inode-based 結構，透過 FileSystem、Inode、Blocks 三個層次維護系統運作，精確管理 inodes 分配、block_bitmap 狀態、data_blocks 儲存空間
 1. **FileSystem 全域管理中心**：
-    * 維護全域狀態，包含分區大小、Inode 使用率與區塊佔用統計。
-
+    - 維護全域狀態，包含分區大小、Inode 使用率與區塊佔用統計。
 2. **Inode 樹狀結構**：
-    * 透過 parent 指標與 directory_items 動態陣列維護目錄階層，實現高效的路徑導航與遞迴清理。
-    * Inode 代表檔目錄或檔案，每個 Inode 紀錄檔案名稱、大小、類型及 start_block(如果是檔案)。
-
+    - 透過 parent 指標與 directory_items 動態陣列維護目錄階層，實現高效的路徑導航與遞迴清理。
+    - Inode 代表檔目錄或檔案，每個 Inode 紀錄檔案名稱、大小、類型及 start_block(如果是檔案)。
 3. **Blocks 存下「檔案」二進位數據**：
-    * 目錄資訊完全由 inodes 結構維護，不額外占用 data_blocks。
-    * 檔案資訊由 Block Bitmap 管理空間分配，data_blocks 存存檔案資料。
+    - 目錄資訊完全由 inodes 結構維護，不額外占用 data_blocks。
+    - 檔案資訊由 Block Bitmap 管理空間分配，data_blocks 存存檔案資料。
 
 ## 功能說明
 本系統提供 CLI 互動介面，包含以下功能：
@@ -30,11 +28,11 @@
 * **連續空間分配**：檔案寫入時搜尋 Bitmap 中的連續空閒區塊，確保數據在磁碟上的物理連續性，優化順序讀寫。
 * **遞迴資源回收**：實作深度優先搜尋（DFS）遞迴邏輯。刪除目錄時，系統會先序遍歷子項，確保所有巢狀目錄、檔案及其佔用的物理區塊 (Bitmap) 與 Inode 被徹底釋放。
 * **資料持久化**：實作自定義序列化機制，將複雜的記憶體樹狀結構轉為線性二進位檔。儲存順序為：
-1. 安全驗證密碼
-2. FileSystem 全域狀態
-3. Block Bitmap 映像
-4. Inode Tree (DFS Pre-order)
-5. Raw Data Blocks
+    1. 安全驗證密碼
+    2. FileSystem 全域狀態
+    3. Block Bitmap 映像
+    4. Inode Tree (DFS Pre-order)
+    5. Raw Data Blocks
 
 ## 編譯、執行與測試指令
 
