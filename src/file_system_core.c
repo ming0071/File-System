@@ -130,45 +130,42 @@ void my_mkdir(FileSystem *fs, const char *dirname)
     }
 }
 
-void deleteSubInodes(FileSystem *fs, Inode *inode) {
+void delete_inode(FileSystem *fs, Inode *inode) {
     if (!inode) return;
 
-    for (size_t i = 0; i < inode->directory_item_count; i++) {
-        Inode *child = inode->directory_items[i];
-        if (!child) continue;
-
-
-        if (child->is_directory) {
-            deleteSubInodes(fs, child);
-        } else {
-            // file, clear its data blocks
-            if (child->start_block != -1) {
-                for (size_t j = 0; j < child->block_count; j++) {
-                    int block_index = child->start_block + j; 
-                    if (block_index < (int)fs->block_count) {
-                        fs->block_bitmap[block_index] = 0;
-                    }
+    // Recursively delete all child inodes, if it's a directory
+    if (inode->is_directory && inode->directory_items) {
+        for (size_t i = 0; i < inode->directory_item_count; i++) {
+            delete_inode(fs, inode->directory_items[i]);
+        }
+        free(inode->directory_items);
+        inode->directory_items = NULL;
+        inode->directory_item_count = 0;
+    }
+    else if (!inode->is_directory) {
+        // if it's a file, clear the data blocks in the block bitmap
+        if (inode->start_block != -1) {
+            for (size_t j = 0; j < inode->block_count; j++) {
+                int block_index = inode->start_block + j;
+                if (block_index < (int)fs->block_count) {
+                    fs->block_bitmap[block_index] = 0;
                 }
-                fs->block_used -= child->block_count;
             }
+            fs->block_used -= inode->block_count;
         }
-
-        // Remove the child inode from the global inodes array
-        fs->inode_used--;
-        for (size_t k = 0; k < fs->inode_count; k++) {
-            if (fs->inodes[k] == child) {
-                fs->inodes[k] = NULL;
-                break;
-            }
-        }
-        free(child->name);
-        free(child);
     }
 
-    // Clear the directory's items
-    free(inode->directory_items);
-    inode->directory_items = NULL;
-    inode->directory_item_count = 0;
+    // Remove the inode from the global inodes array
+    for (size_t k = 0; k < fs->inode_count; k++) {
+        if (fs->inodes[k] == inode) {
+            fs->inodes[k] = NULL;
+            fs->inode_used--;
+            break;
+        }
+    }
+
+    free(inode->name);
+    free(inode);
 }
 
 void my_rmdir(FileSystem *fs, const char *dirname)
@@ -192,7 +189,7 @@ void my_rmdir(FileSystem *fs, const char *dirname)
         return;
     }
 
-    deleteSubInodes(fs, target);
+    delete_inode(fs, target);
 
     // Remove the target directory from the current directory's directory_items array
     for (size_t i = target_index; i < fs->current_directory->directory_item_count - 1; i++)
@@ -200,18 +197,6 @@ void my_rmdir(FileSystem *fs, const char *dirname)
         fs->current_directory->directory_items[i] = fs->current_directory->directory_items[i + 1];
     }
     fs->current_directory->directory_item_count--;
-
-    fs->inode_used--;
-    for (size_t i = 0; i < fs->inode_count; i++)
-    {
-        if (fs->inodes[i] == target)
-        {
-            fs->inodes[i] = NULL;
-            break;
-        }
-    }
-    free(target->name);
-    free(target);
 
     printf("Directory '%s' and its contents have been removed.\n", dirname);
 }
