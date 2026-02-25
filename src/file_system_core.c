@@ -116,7 +116,7 @@ void my_mkdir(FileSystem *fs, const char *dirname)
     new_dir->parent = fs->current_directory;
     new_dir->directory_items = NULL;
     new_dir->directory_item_count = 0;
-    
+
     fs->inodes[fs->inode_used] = new_dir;
     fs->inode_used++;
     fs->block_used++;
@@ -130,37 +130,48 @@ void my_mkdir(FileSystem *fs, const char *dirname)
     }
 }
 
-void delete_inode(FileSystem *fs, Inode *inode) {
-    if (!inode) return;
+void delete_inode(FileSystem *fs, Inode *inode)
+{
+    if (!inode)
+        return;
 
     // Recursively delete all child inodes, if it's a directory
-    if (inode->is_directory && inode->directory_items) {
-        for (size_t i = 0; i < inode->directory_item_count; i++) {
+    if (inode->is_directory && inode->directory_items)
+    {
+        for (size_t i = 0; i < inode->directory_item_count; i++)
+        {
             delete_inode(fs, inode->directory_items[i]);
         }
         free(inode->directory_items);
         inode->directory_items = NULL;
         inode->directory_item_count = 0;
     }
-    else if (!inode->is_directory) {
+    else if (!inode->is_directory)
+    {
         // if it's a file, clear the data blocks in the block bitmap
-        if (inode->start_block != -1) {
-            for (size_t j = 0; j < inode->block_count; j++) {
-                int block_index = inode->start_block + j;
-                if (block_index < (int)fs->block_count) {
-                    fs->block_bitmap[block_index] = 0;
-                }
-            }
-            fs->block_used -= inode->block_count;
-        }
-    }
+        if (inode->start_block != -1)
+        {
+            int end_block = inode->start_block + (int)inode->block_count;
 
-    // Remove the inode from the global inodes array
-    for (size_t k = 0; k < fs->inode_count; k++) {
-        if (fs->inodes[k] == inode) {
-            fs->inodes[k] = NULL;
-            fs->inode_used--;
-            break;
+            if (end_block <= (int)fs->block_count)
+            {
+                for (int i = inode->start_block; i < end_block; i++)
+                {
+                    fs->block_bitmap[i] = 0;
+                }
+                fs->block_used -= inode->block_count;
+            }
+        }
+
+        // Remove the inode from the global inodes array
+        for (size_t k = 0; k < fs->inode_count; k++)
+        {
+            if (fs->inodes[k] == inode)
+            {
+                fs->inodes[k] = NULL;
+                fs->inode_used--;
+                break;
+            }
         }
     }
 
@@ -230,12 +241,12 @@ void touch(FileSystem *fs, const char *fileName)
 
     // Initialize the inode properties
     newFile->name = strdup(fileName); // Duplicate the file name
-    newFile->is_directory = 0;        
-    newFile->file_size = 0;           
-    newFile->start_block = -1;        // No block allocated yet
-    newFile->block_count = 0;         
+    newFile->is_directory = 0;
+    newFile->file_size = 0;
+    newFile->start_block = -1; // No block allocated yet
+    newFile->block_count = 0;
     newFile->directory_item_count = 0;
-    newFile->directory_items = NULL; 
+    newFile->directory_items = NULL;
     newFile->parent = fs->current_directory;
 
     // Add the new file to the current directory's directory_items array
