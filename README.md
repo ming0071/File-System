@@ -9,7 +9,7 @@
   <img src="fig/structure.png" width="75%" alt="System Architecture"/>
 </p>
 
-## 系統架構設計
+## 系統架構
 採用經典的 Inode-based 結構，透過 FileSystem、Inode、Blocks 三個層次維護系統運作，精確管理 `inodes` 分配、`block_bitmap` 狀態、`data_blocks` 儲存空間
 1. **FileSystem 全域管理中心**：
     - 維護全域狀態，包含分區大小、Inode 使用率與區塊佔用統計。
