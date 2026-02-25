@@ -269,50 +269,40 @@ void touch(FileSystem *fs, const char *fileName)
 
 void rm(FileSystem *fs, const char *filename)
 {
+    Inode *target = NULL;
+    size_t target_index = -1;
+
     // check if the file exists
-    Inode *inode_to_delete = NULL;
-    size_t inode_index = -1;
     for (size_t i = 0; i < fs->current_directory->directory_item_count; i++)
     {
         if (strcmp(fs->current_directory->directory_items[i]->name, filename) == 0)
         {
-            inode_to_delete = fs->current_directory->directory_items[i];
-            inode_index = i;
+            target = fs->current_directory->directory_items[i];
+            target_index = i;
             break;
         }
     }
-    if (inode_to_delete == NULL)
+    if (target == NULL)
     {
         printf("File not found: %s\n", filename);
         return;
     }
 
     // check if the file is a directory
-    if (inode_to_delete->is_directory)
+    if (target->is_directory)
     {
         printf("%s is a directory, use rmdir to remove directories.\n", filename);
         return;
     }
 
     // clear the data blocks(block_bitmap)
-    for (size_t i = 0; i < inode_to_delete->block_count; i++)
-    {
-        size_t block_index = inode_to_delete->start_block + i;
-        fs->block_bitmap[block_index] = 0;
-    }
+    delete_inode(fs, target);
 
-    fs->block_used -= inode_to_delete->block_count;
-    free(inode_to_delete->name);
-    free(inode_to_delete);
-    fs->inodes[inode_index] = NULL;
-
-    for (size_t i = inode_index; i < fs->current_directory->directory_item_count - 1; i++)
+    for (size_t i = target_index; i < fs->current_directory->directory_item_count - 1; i++)
     {
         fs->current_directory->directory_items[i] = fs->current_directory->directory_items[i + 1];
     }
-
     fs->current_directory->directory_item_count--;
-    fs->inode_used--;
 
     printf("File %s has been deleted.\n", filename);
 }
