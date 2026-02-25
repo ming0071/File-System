@@ -3,7 +3,6 @@
 #include <string.h>
 #include "file_system.h"
 
-// 內部輔助函數
 static void saveInodeRecursive(FILE *file, Inode *inode) {
     // Save the basic properties of the inode
     size_t len = strlen(inode->name) + 1;
@@ -23,7 +22,7 @@ static void saveInodeRecursive(FILE *file, Inode *inode) {
 }
 
 void saveFileSystem(FileSystem *fs, const char *password) {
-    FILE *file = fopen("data/filesystem.dump", "wb"); // 改為 data 目錄
+    FILE *file = fopen("data/filesystem.dump", "wb"); 
     if (!file) { perror("Failed to open dump file"); return; }
 
     // Save the 6-digit password

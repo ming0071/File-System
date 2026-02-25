@@ -47,17 +47,6 @@ void printCurrentPath(Inode *current)
     printf("%s/", current->name);
 }
 
-void status(FileSystem *fs)
-{
-    printf("partition size: %zu \n", fs->partition_size);
-    printf("total inodes: %zu \n", fs->inode_count);
-    printf("used inodes: %zu \n", fs->inode_used);
-    printf("total blocks: %zu \n", fs->block_count);
-    printf("used blocks: %zu \n", fs->block_used);
-    printf("block size: %zu \n", BLOCK_SIZE);
-    printf("free space: %zu \n", fs->partition_size - fs->block_used * BLOCK_SIZE);
-}
-
 void ls(FileSystem *fs)
 {
     if (!fs->current_directory->is_directory)
@@ -117,6 +106,7 @@ void my_mkdir(FileSystem *fs, const char *dirname)
         }
     }
 
+    // init new directory inode
     Inode *new_dir = (Inode *)malloc(sizeof(Inode));
     new_dir->name = strdup(dirname);
     new_dir->is_directory = 1;
@@ -131,6 +121,7 @@ void my_mkdir(FileSystem *fs, const char *dirname)
     fs->inode_used++;
     fs->block_used++;
 
+    // Add the new directory to the current directory's directory_items array
     if (fs->current_directory->is_directory)
     {
         fs->current_directory->directory_item_count++;
@@ -139,7 +130,6 @@ void my_mkdir(FileSystem *fs, const char *dirname)
     }
 }
 
-
 void deleteSubInodes(FileSystem *fs, Inode *inode) {
     if (!inode) return;
 
@@ -147,14 +137,14 @@ void deleteSubInodes(FileSystem *fs, Inode *inode) {
         Inode *child = inode->directory_items[i];
         if (!child) continue;
 
-        // 1. 如果是目錄，先遞迴進去刪除子項目
+
         if (child->is_directory) {
             deleteSubInodes(fs, child);
         } else {
-            // 2. 如果是檔案，回收磁碟區塊 (這部分是 BMC 工程師最看重的)
+            // file, clear its data blocks
             if (child->start_block != -1) {
                 for (size_t j = 0; j < child->block_count; j++) {
-                    int block_index = child->start_block + j; // 修正：應使用 j
+                    int block_index = child->start_block + j; 
                     if (block_index < (int)fs->block_count) {
                         fs->block_bitmap[block_index] = 0;
                     }
@@ -163,7 +153,7 @@ void deleteSubInodes(FileSystem *fs, Inode *inode) {
             }
         }
 
-        // 3. 更新全局 Inode 使用量與清理索引陣列
+        // Remove the child inode from the global inodes array
         fs->inode_used--;
         for (size_t k = 0; k < fs->inode_count; k++) {
             if (fs->inodes[k] == child) {
@@ -171,13 +161,11 @@ void deleteSubInodes(FileSystem *fs, Inode *inode) {
                 break;
             }
         }
-
-        // 4. 釋放 RAM 資源
         free(child->name);
         free(child);
     }
 
-    // 5. 釋放當前目錄的項目指標陣列
+    // Clear the directory's items
     free(inode->directory_items);
     inode->directory_items = NULL;
     inode->directory_item_count = 0;
@@ -206,6 +194,7 @@ void my_rmdir(FileSystem *fs, const char *dirname)
 
     deleteSubInodes(fs, target);
 
+    // Remove the target directory from the current directory's directory_items array
     for (size_t i = target_index; i < fs->current_directory->directory_item_count - 1; i++)
     {
         fs->current_directory->directory_items[i] = fs->current_directory->directory_items[i + 1];
@@ -221,7 +210,6 @@ void my_rmdir(FileSystem *fs, const char *dirname)
             break;
         }
     }
-
     free(target->name);
     free(target);
 
@@ -257,12 +245,12 @@ void touch(FileSystem *fs, const char *fileName)
 
     // Initialize the inode properties
     newFile->name = strdup(fileName); // Duplicate the file name
-    newFile->is_directory = 0;        // It is a file
-    newFile->file_size = 0;           // Initial size is 0
+    newFile->is_directory = 0;        
+    newFile->file_size = 0;           
     newFile->start_block = -1;        // No block allocated yet
-    newFile->block_count = 0;         // No blocks used
+    newFile->block_count = 0;         
     newFile->directory_item_count = 0;
-    newFile->directory_items = NULL; // Not a directory
+    newFile->directory_items = NULL; 
     newFile->parent = fs->current_directory;
 
     // Add the new file to the current directory's directory_items array
@@ -276,24 +264,123 @@ void touch(FileSystem *fs, const char *fileName)
         free(newFile);
         return;
     }
-
     fs->current_directory->directory_items[fs->current_directory->directory_item_count] = newFile;
     fs->current_directory->directory_item_count = newItemCount;
 
     // Add the new inode to the global inodes array
     for (size_t i = 0; i < fs->inode_count; i++)
     {
-        if (!fs->inodes[i]) // Find a free slot
+        if (!fs->inodes[i])
         {
             fs->inodes[i] = newFile;
             break;
         }
     }
 
-    // Update filesystem metadata
     fs->inode_used++;
 
     printf("File '%s' created successfully.\n", fileName);
+}
+
+void rm(FileSystem *fs, const char *filename)
+{
+    // check if the file exists
+    Inode *inode_to_delete = NULL;
+    size_t inode_index = -1;
+    for (size_t i = 0; i < fs->current_directory->directory_item_count; i++)
+    {
+        if (strcmp(fs->current_directory->directory_items[i]->name, filename) == 0)
+        {
+            inode_to_delete = fs->current_directory->directory_items[i];
+            inode_index = i;
+            break;
+        }
+    }
+    if (inode_to_delete == NULL)
+    {
+        printf("File not found: %s\n", filename);
+        return;
+    }
+
+    // check if the file is a directory
+    if (inode_to_delete->is_directory)
+    {
+        printf("%s is a directory, use rmdir to remove directories.\n", filename);
+        return;
+    }
+
+    // clear the data blocks(block_bitmap)
+    for (size_t i = 0; i < inode_to_delete->block_count; i++)
+    {
+        size_t block_index = inode_to_delete->start_block + i;
+        fs->block_bitmap[block_index] = 0;
+    }
+
+    fs->block_used -= inode_to_delete->block_count;
+    free(inode_to_delete->name);
+    free(inode_to_delete);
+    fs->inodes[inode_index] = NULL;
+
+    for (size_t i = inode_index; i < fs->current_directory->directory_item_count - 1; i++)
+    {
+        fs->current_directory->directory_items[i] = fs->current_directory->directory_items[i + 1];
+    }
+
+    fs->current_directory->directory_item_count--;
+    fs->inode_used--;
+
+    printf("File %s has been deleted.\n", filename);
+}
+
+void cat(FileSystem *fs, const char *filename)
+{
+    // determine the inode of the file
+    Inode *inode = NULL;
+    for (size_t i = 0; i < fs->current_directory->directory_item_count; i++)
+    {
+        if (strcmp(fs->current_directory->directory_items[i]->name, filename) == 0)
+        {
+            inode = fs->current_directory->directory_items[i];
+            break;
+        }
+    }
+    if (inode == NULL)
+    {
+        printf("File not found: %s\n", filename);
+        return;
+    }
+
+    // check if the file is a directory
+    if (inode->is_directory)
+    {
+        printf("%s is a directory, not a regular file.\n", filename);
+        return;
+    }
+
+    // print the content of the file, read data from data blocks
+    size_t remaining_size = inode->file_size;
+    size_t block_index = inode->start_block;
+
+    while (remaining_size > 0)
+    {
+        size_t block_size = remaining_size > BLOCK_SIZE ? BLOCK_SIZE : remaining_size;
+        printf("%.*s", (int)block_size, &fs->data_blocks[block_index * BLOCK_SIZE]);
+
+        remaining_size -= block_size;
+        block_index++;
+    }
+    printf("\n");
+}
+
+void status(FileSystem *fs)
+{
+    printf("partition size: %zu \n", fs->partition_size);
+    printf("total inodes: %zu \n", fs->inode_count);
+    printf("used inodes: %zu \n", fs->inode_used);
+    printf("total blocks: %zu \n", fs->block_count);
+    printf("used blocks: %zu \n", fs->block_used);
+    printf("block size: %zu \n", BLOCK_SIZE);
+    printf("free space: %zu \n", fs->partition_size - fs->block_used * BLOCK_SIZE);
 }
 
 void put(FileSystem *fs, const char *filename)
@@ -398,47 +485,6 @@ void put(FileSystem *fs, const char *filename)
     }
 }
 
-void cat(FileSystem *fs, const char *filename)
-{
-    // determine the inode of the file
-    Inode *inode = NULL;
-    for (size_t i = 0; i < fs->current_directory->directory_item_count; i++)
-    {
-        if (strcmp(fs->current_directory->directory_items[i]->name, filename) == 0)
-        {
-            inode = fs->current_directory->directory_items[i];
-            break;
-        }
-    }
-    if (inode == NULL)
-    {
-        printf("File not found: %s\n", filename);
-        return;
-    }
-
-    // check if the file is a directory
-    if (inode->is_directory)
-    {
-        printf("%s is a directory, not a regular file.\n", filename);
-        return;
-    }
-
-    // print the content of the file, read data from data blocks
-    // size_t bytes_read = 0;
-    size_t remaining_size = inode->file_size;
-    size_t block_index = inode->start_block;
-
-    while (remaining_size > 0)
-    {
-        size_t block_size = remaining_size > BLOCK_SIZE ? BLOCK_SIZE : remaining_size;
-        printf("%.*s", (int)block_size, &fs->data_blocks[block_index * BLOCK_SIZE]);
-
-        remaining_size -= block_size;
-        block_index++;
-    }
-    printf("\n");
-}
-
 void get(FileSystem *fs, const char *filename)
 {
     Inode *target_file = NULL;
@@ -457,7 +503,7 @@ void get(FileSystem *fs, const char *filename)
         return;
     }
 
-    // 檢查或建立 dump 資料夾
+    // Create dump directory if it doesn't exist
     struct stat st = {0};
     if (stat("dump", &st) == -1)
     {
@@ -491,54 +537,4 @@ void get(FileSystem *fs, const char *filename)
 
     fclose(file);
     printf("File '%s' has been saved to 'dump/%s'.\n", filename, filename);
-}
-
-void rm(FileSystem *fs, const char *filename)
-{
-    // check if the file exists
-    Inode *inode_to_delete = NULL;
-    size_t inode_index = -1;
-    for (size_t i = 0; i < fs->current_directory->directory_item_count; i++)
-    {
-        if (strcmp(fs->current_directory->directory_items[i]->name, filename) == 0)
-        {
-            inode_to_delete = fs->current_directory->directory_items[i];
-            inode_index = i;
-            break;
-        }
-    }
-    if (inode_to_delete == NULL)
-    {
-        printf("File not found: %s\n", filename);
-        return;
-    }
-
-    // check if the file is a directory
-    if (inode_to_delete->is_directory)
-    {
-        printf("%s is a directory, use rmdir to remove directories.\n", filename);
-        return;
-    }
-
-    // clear the data blocks(block_bitmap)
-    for (size_t i = 0; i < inode_to_delete->block_count; i++)
-    {
-        size_t block_index = inode_to_delete->start_block + i;
-        fs->block_bitmap[block_index] = 0;
-    }
-
-    fs->block_used -= inode_to_delete->block_count;
-    free(inode_to_delete->name);
-    free(inode_to_delete);
-    fs->inodes[inode_index] = NULL;
-
-    for (size_t i = inode_index; i < fs->current_directory->directory_item_count - 1; i++)
-    {
-        fs->current_directory->directory_items[i] = fs->current_directory->directory_items[i + 1];
-    }
-
-    fs->current_directory->directory_item_count--;
-    fs->inode_used--;
-
-    printf("File %s has been deleted.\n", filename);
 }

@@ -113,6 +113,7 @@ int main()
     printf("Choose an option: ");
     scanf("%d", &option);
 
+    // write
     if (option == 2)
     {
         size_t fileSystemSize;
@@ -131,6 +132,7 @@ int main()
 
         commandLoop(fileSystem);
     }
+    // read
     else if (option == 1)
     {
         char password[7];

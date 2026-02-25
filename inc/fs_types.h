@@ -17,6 +17,7 @@
 #define COLOR_WHITE "\033[0;37m"
 #define COLUMN_WIDTH 10
 
+// Inode: Manages file metadata and tree structure
 typedef struct Inode
 {
     char *name;
@@ -29,6 +30,7 @@ typedef struct Inode
     size_t directory_item_count;
 } Inode;
 
+// FileSystem: Manages global partition state and resource allocation
 typedef struct FileSystem
 {
     size_t partition_size;

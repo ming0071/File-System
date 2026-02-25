@@ -5,7 +5,6 @@
 
 // Core Lifecycle
 FileSystem *createFileSystem(size_t size);
-// void freeFileSystem(FileSyste。m *fs); // 建議新增：釋放所有資源
 
 // File Operations
 void my_mkdir(FileSystem *fs, const char *dirname);
