@@ -6,7 +6,7 @@
 本專案透過分配一塊連續的記憶體空間來模擬硬體磁碟。使用者可以在此空間內進行完整的檔案操作。系統支援將記憶體中的狀態保存為二進位映像檔（.dump），並在下次啟動時透過密碼驗證還原。
 
 <p align="center">
-  <img src="fig/structure.png" width="80%" alt="System Architecture"/>
+  <img src="fig/structure.png" width="75%" alt="System Architecture"/>
 </p>
 
 ## 系統架構設計
