@@ -12,7 +12,7 @@
 
 2. Inode 樹狀結構：
 * 透過 parent 指標與 directory_items 動態陣列維護目錄階層，實現高效的路徑導航與遞迴清理。
-* 每個 Inode 紀錄檔案名稱、大小、類型及物理起始區塊索引（start_block）。
+* Inode 代表檔目錄或檔案，每個 Inode 紀錄檔案名稱、大小、類型及 start_block(如果是檔案)。
 
 3. Blocks 存下「檔案」二進位數據
 * 目錄資訊完全由 inodes 結構維護，不額外占用 data_blocks。
