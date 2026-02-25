@@ -6,15 +6,15 @@
 本專案透過分配一塊連續的記憶體空間來模擬硬體磁碟。使用者可以在此空間內進行完整的檔案操作。系統支援將記憶體中的狀態保存為二進位映像檔（.dump），並在下次啟動時透過密碼驗證還原。
 
 ## 系統架構設計
-採用經典的 Inode-based 結構，透過 FileSystem、Inode、Blocks 三個層次維護系統運作，精確管理 inodes 分配、block_bitmap 狀態、data_blocks 儲存空間
+採用經典的 Inode-based 結構，透過 FileSystem、Inode、Blocks 三個層次維護系統運作，精確管理 `inodes` 分配、`block_bitmap` 狀態、`data_blocks` 儲存空間
 1. **FileSystem 全域管理中心**：
     - 維護全域狀態，包含分區大小、Inode 使用率與區塊佔用統計。
 2. **Inode 樹狀結構**：
     - 透過 parent 指標與 directory_items 動態陣列維護目錄階層，實現高效的路徑導航與遞迴清理。
     - Inode 代表檔目錄或檔案，每個 Inode 紀錄檔案名稱、大小、類型及 start_block(如果是檔案)。
 3. **Blocks 存下「檔案」二進位數據**：
-    - 目錄資訊完全由 inodes 結構維護，不額外占用 data_blocks。
-    - 檔案資訊由 Block Bitmap 管理空間分配，data_blocks 存存檔案資料。
+    - 目錄資訊完全由 `inodes` 結構維護，不占用 `data_blocks`。
+    - 檔案資訊由 `block_bitmap` 管理空間分配，`data_blocks` 存檔案資料。
 
 ## 功能說明
 本系統提供 CLI 互動介面，包含以下功能：
